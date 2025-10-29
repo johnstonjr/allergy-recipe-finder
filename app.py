@@ -3,6 +3,7 @@ import json
 import os
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
+from dotenv import load_dotenv
 # Import the recipe utilities
 from recipe_utils import search_recipes_by_ingredient, get_recipe_details, RecipeAPIError
 # Keep api_utils for potential future nutrient lookups, but not primary use
@@ -13,8 +14,17 @@ import time
 app = Flask(__name__)
 CORS(app)
 
+# Load environment variables from .env file
+load_dotenv()
+
+# Get the API key from the environment
+LLM_API_KEY = os.environ.get("GOOGLE_API_KEY")
+
+# Check if the key exists
+if not LLM_API_KEY:
+    raise ValueError("No GOOGLE_API_KEY set in .env file or environment")
+
 # --- LLM API Configuration ---
-LLM_API_KEY = "AIzaSyCjdJ8NVp3p6vqN60_B4OJC6jHxPRign_w" # Your Gemini API Key
 LLM_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent"
 
 # --- Allergy Keywords Mapping (Keep as is) ---
