@@ -144,8 +144,9 @@
 
     <script>
         // Set the API URL for the Flask server
-        const API_ENDPOINT = 'http://localhost:5000/meal/suggest'; // Still using the same endpoint
-        const HEALTH_ENDPOINT = 'http://localhost:5000/health'; 
+        // Use relative URLs so it works both locally and on Render
+        const API_ENDPOINT = '/meal/suggest';
+        const HEALTH_ENDPOINT = '/health'; 
         
         // Allergy tags for autocomplete (unchanged)
         const ALLERGY_TAGS = ['peanut', 'legume', 'treenut', 'dairy', 'egg', 'fish', 'shellfish', 'wheat', 'gluten', 'sesame', 'mustard', 'soy', 'sulfites', 'corn', 'tomato', 'citrus', 'nightshade', 'spices', 'seeds', 'meat', 'poultry'];
@@ -355,7 +356,7 @@
             const resultsDiv = document.getElementById('results');
             let hint = isBackendIssue 
                 ? "Try adjusting your search ingredients or relaxing filters." 
-                : "Check if the Flask server is running on http://localhost:5000 and the console for technical errors.";
+                : "Check the console for technical errors. If running locally, ensure Flask is running on port 5000.";
             
             resultsDiv.innerHTML = `
                 <h3>🍲 Safe Recipe Results</h3>
