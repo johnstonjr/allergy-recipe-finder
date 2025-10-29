@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Allergy Recipe Finder</title> 
+    <style>
+        /* Styles remain largely the same, minor adjustments for recipe display */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Inter', sans-serif; line-height: 1.6; color: #333; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; padding: 20px; }
+        .container { max-width: 800px; margin: 0 auto; background: white; border-radius: 15px; box-shadow: 0 20px 40px rgba(0,0,0,0.1); overflow: hidden; position: relative; }
+        .header { background: linear-gradient(135deg, #ff6b6b, #ee5a24); color: white; padding: 30px; text-align: center; }
+        .header h1 { font-size: 2.5em; margin-bottom: 10px; font-weight: 600; }
+        .content { padding: 30px; }
+        .section { margin-bottom: 30px; padding: 20px; border-radius: 10px; background: #f8f9fa; border-left: 4px solid #ff6b6b; }
+        .section h2 { color: #2c3e50; margin-bottom: 15px; font-size: 1.4em; }
+        .allergy-constraints { background: #fff3cd; border-left-color: #ffc107; }
+        .allergy-constraints h2 { color: #856404; }
+        .form-group { margin-bottom: 20px; position: relative; }
+        .form-group label { display: block; margin-bottom: 8px; font-weight: 600; color: #2c3e50; }
+        .form-group input, .form-group textarea, .form-group select { width: 100%; padding: 12px; border: 2px solid #e9ecef; border-radius: 8px; font-size: 16px; transition: border-color 0.3s ease; background-color: white; }
+        .form-group input:focus, .form-group textarea:focus, .form-group select:focus { outline: none; border-color: #667eea; box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1); }
+        .form-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 20px; }
+        .btn { background: linear-gradient(135deg, #667eea, #764ba2); color: white; padding: 15px 30px; border: none; border-radius: 8px; font-size: 18px; font-weight: 600; cursor: pointer; transition: transform 0.2s ease, box-shadow 0.2s ease; width: 100%; }
+        .btn:hover { transform: translateY(-2px); box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3); }
+        .results { margin-top: 30px; padding: 20px; border-radius: 10px; background: #f8f9fa; border-left: 4px solid #28a745; min-height: 100px; }
+        .results h3 { color: #2c3e50; margin-bottom: 15px; }
+        .loading { text-align: center; color: #667eea; font-style: italic; padding: 20px 0; }
+        .loading::after { content: ""; display: inline-block; width: 10px; height: 10px; border: 2px solid #667eea; border-radius: 50%; border-top-color: transparent; animation: spin 1s linear infinite; margin-left: 10px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .error { background: #f8d7da; color: #721c24; padding: 15px; border-radius: 8px; border-left: 4px solid #dc3545; }
+        .success { background: #d4edda; color: #155724; padding: 15px; border-radius: 8px; border-left: 4px solid #28a745; }
+        
+        /* Recipe Display Styles */
+        .recipe-card { background: white; padding: 20px; border-radius: 10px; margin: 15px 0; box-shadow: 0 2px 10px rgba(0,0,0,0.1); border: 1px solid #eee; }
+        .recipe-card h4 { color: #2c3e50; margin-bottom: 15px; font-size: 1.3em; display: flex; align-items: center; }
+        .recipe-card h4 img { width: 50px; height: 50px; border-radius: 8px; margin-right: 15px; object-fit: cover; }
+        .recipe-ingredients, .recipe-instructions { margin-top: 15px; }
+        .recipe-ingredients h5, .recipe-instructions h5 { color: #495057; margin-bottom: 10px; }
+        .recipe-ingredients ul, .recipe-instructions ol { margin-left: 20px; padding-left: 10px; }
+        .recipe-ingredients li { margin-bottom: 5px; }
+        .recipe-instructions li { margin-bottom: 8px; line-height: 1.5; }
+
+        /* Tagging Styles (Unchanged) */
+        .tag-input-wrapper { border: 2px solid #e9ecef; border-radius: 8px; padding: 5px 10px; display: flex; flex-wrap: wrap; align-items: center; min-height: 48px; }
+        .tag-input-wrapper:focus-within { border-color: #667eea; box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1); }
+        .allergy-tag { display: inline-flex; align-items: center; background-color: #ffc107; color: #333; padding: 4px 10px; border-radius: 4px; margin: 3px 5px 3px 0; font-size: 0.9em; font-weight: 500; }
+        .tag-close { margin-left: 8px; cursor: pointer; font-weight: bold; color: #333; opacity: 0.7; transition: opacity 0.2s; }
+        .tag-close:hover { opacity: 1; }
+        .tag-input { border: none; flex-grow: 1; padding: 8px 0; outline: none; font-size: 16px; }
+        .suggestions-dropdown { position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid #ddd; border-radius: 8px; z-index: 100; max-height: 150px; overflow-y: auto; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        .suggestion-item { padding: 10px 12px; cursor: pointer; font-size: 16px; }
+        .suggestion-item:hover, .suggestion-item.highlighted { background: #e6e9ff; color: #667eea; }
+        
+        .tip-jar { position: sticky; bottom: 0; text-align: center; padding: 20px 30px; background: #f8f9fa; border-top: 1px solid #eee; }
+        .tip-btn { background: linear-gradient(135deg, #1abc9c, #16a085); color: white; padding: 10px 20px; border: none; border-radius: 8px; font-size: 1em; font-weight: 600; cursor: pointer; transition: background 0.2s; box-shadow: 0 4px 10px rgba(26, 188, 156, 0.3); text-decoration: none; display: inline-block; }
+        .tip-btn:hover { background: #16a085; }
+
+        @media (max-width: 768px) { .form-row { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🍽️ Allergy Recipe Finder</h1>
+            <p>Find safe and tasty recipes based on your ingredients and dietary needs</p>
+        </div>
+
+        <div class="content">
+            <div class="section allergy-constraints">
+                <h2>🚫 Allergy & Dietary Exclusions</h2>
+                <p style="margin-bottom: 10px;">Define allergies to exclude (e.g., peanut, legume, dairy). Safety is our priority!</p>
+                <div class="form-group autocomplete-container">
+                    <div id="tag-input-wrapper" class="tag-input-wrapper">
+                        <input type="text" id="allergy-input" class="tag-input" 
+                               placeholder="Type an exclusion (e.g., peanut, egg)"
+                               oninput="handleAllergyInput()"
+                               onkeydown="handleKeydown(event)"
+                               autocomplete="off">
+                    </div>
+                    <div id="allergy-suggestions" class="suggestions-dropdown" style="display: none;"></div>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>⚙️ Preferences & Available Ingredients</h2>
+                <form id="recipe-form">
+                    
+                    <div class="form-group">
+                        <label for="dietary-preference">Dietary Preference:</label>
+                        <select id="dietary-preference" required>
+                            <option value="none">None</option>
+                            <option value="pescetarian">Pescetarian</option>
+                            <option value="vegetarian">Vegetarian</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="available-ingredients">Main Ingredient(s) You Have (Comma Separated):</label>
+                        <textarea id="available-ingredients" rows="2" placeholder="e.g., chicken, rice, onion (Required for search)" required></textarea>
+                    </div>
+
+                    <h3 style="color: #495057; margin-bottom: 15px; font-size: 1.1em;">Optional Nutrient Goals:</h3>
+                     <div class="form-row">
+                        <div class="form-group">
+                            <label for="max-cost">Max Cost ($):</label>
+                            <input type="number" id="max-cost" value="10.00" min="0" step="0.01"> 
+                        </div>
+                        <div class="form-group">
+                            <label for="min-protein">Min Protein (g):</label>
+                            <input type="number" id="min-protein" value="20" min="0" step="0.1">
+                        </div>
+                        <div class="form-group">
+                            <label for="max-fat">Max Fat (g):</label>
+                            <input type="number" id="max-fat" value="50" min="0" step="0.1">
+                        </div>
+                    </div>
+
+                    <button type="button" class="btn" onclick="findRecipes()">
+                        🔍 Find Safe Recipes
+                    </button>
+                </form>
+            </div>
+
+            <div class="results" id="results">
+                <h3>🍲 Safe Recipe Results</h3>
+                <p>Enter your allergies and ingredients, then click "Find Safe Recipes".</p>
+            </div>
+            
+        </div>
+        <div class="section" style="background: #f8d7da; border-left-color: #dc3545;">
+            <h2>⚠️ Food Safety Notice</h2>
+            <p>
+                Always ensure meats, poultry, and fish are cooked to their safe minimum internal temperatures. Use a food thermometer for accuracy (e.g., 165°F/74°C for chicken, 145°F/63°C for fish and whole cuts of pork/beef). Consuming raw or undercooked meats may increase your risk of foodborne illness. Adjust cooking times based on the thickness of ingredients and your equipment. Check ingredients on packaged foods to verify safety for your specific allergies.
+            </p>
+        </div>
+        <div class="tip-jar">
+            <p style="margin-bottom: 10px;">Support the project's API costs!</p>
+            <a href="https://example.com/subscribe" target="_blank" class="tip-btn">
+                ⭐ Subscribe ($2/mo)
+            </a>
+        </div>
+    </div>
+
+    <script>
+        // Set the API URL for the Flask server
+        const API_ENDPOINT = 'http://localhost:5000/meal/suggest'; // Still using the same endpoint
+        const HEALTH_ENDPOINT = 'http://localhost:5000/health'; 
+        
+        // Allergy tags for autocomplete (unchanged)
+        const ALLERGY_TAGS = ['peanut', 'legume', 'treenut', 'dairy', 'egg', 'fish', 'shellfish', 'wheat', 'gluten', 'sesame', 'mustard', 'soy', 'sulfites', 'corn', 'tomato', 'citrus', 'nightshade', 'spices', 'seeds', 'meat', 'poultry'];
+        let selectedAllergies = []; 
+        let highlightedIndex = -1;
+
+        // Tagging functions (renderTags, addTag, removeTag) remain unchanged
+
+        // Autocomplete functions (handleAllergyInput, handleKeydown, etc.) remain unchanged
+        
+        // --- Tagging & Autocomplete Functions (Keep from previous version) ---
+        function renderTags() {
+            const wrapper = document.getElementById('tag-input-wrapper');
+            const input = document.getElementById('allergy-input');
+            const existingTags = wrapper.querySelectorAll('.allergy-tag');
+            existingTags.forEach(tag => wrapper.removeChild(tag));
+            selectedAllergies.forEach(tagText => {
+                const tag = document.createElement('span');
+                tag.className = 'allergy-tag';
+                tag.textContent = tagText;
+                const close = document.createElement('span');
+                close.className = 'tag-close';
+                close.textContent = 'x';
+                close.onclick = () => removeTag(tagText);
+                tag.appendChild(close);
+                wrapper.insertBefore(tag, input);
+            });
+            input.value = '';
+        }
+        function addTag(tagText) {
+            tagText = tagText.trim().toLowerCase();
+            if (tagText && !selectedAllergies.includes(tagText)) {
+                selectedAllergies.push(tagText);
+                renderTags();
+            }
+            document.getElementById('allergy-suggestions').style.display = 'none';
+            document.getElementById('allergy-input').value = '';
+        }
+        function removeTag(tagText) {
+            selectedAllergies = selectedAllergies.filter(tag => tag !== tagText);
+            renderTags();
+            document.getElementById('allergy-input').focus();
+        }
+        const inputField = document.getElementById('allergy-input');
+        const suggestionsDiv = document.getElementById('allergy-suggestions');
+        function handleAllergyInput() {
+            const currentText = inputField.value.trim().toLowerCase();
+            if (currentText.length === 0) { suggestionsDiv.style.display = 'none'; return; }
+            const filteredSuggestions = ALLERGY_TAGS.filter(tag => tag.startsWith(currentText) && !selectedAllergies.includes(tag));
+            renderSuggestions(filteredSuggestions);
+        }
+        function handleKeydown(e) {
+            const items = Array.from(suggestionsDiv.children);
+            const inputVal = inputField.value.trim();
+            if (suggestionsDiv.style.display === 'block') {
+                if (e.key === 'ArrowDown') { e.preventDefault(); highlightedIndex = (highlightedIndex + 1) % items.length; updateHighlight(items); } 
+                else if (e.key === 'ArrowUp') { e.preventDefault(); highlightedIndex = (highlightedIndex - 1 + items.length) % items.length; updateHighlight(items); } 
+                else if (e.key === 'Enter') { e.preventDefault(); if (highlightedIndex > -1) { selectSuggestion(items[highlightedIndex].textContent); } else if (inputVal) { addTag(inputVal); } } 
+                else if (e.key === 'Escape') { suggestionsDiv.style.display = 'none'; }
+            } else if (e.key === 'Enter' && inputVal) { e.preventDefault(); addTag(inputVal); }
+        }
+        function updateHighlight(items) { items.forEach((item, index) => { item.classList.toggle('highlighted', index === highlightedIndex); if (index === highlightedIndex) { item.scrollIntoView({ block: 'nearest' }); } }); }
+        function renderSuggestions(suggestions) {
+            suggestionsDiv.innerHTML = ''; highlightedIndex = -1;
+            if (suggestions.length === 0) { suggestionsDiv.style.display = 'none'; return; }
+            suggestions.forEach((tag, index) => {
+                const item = document.createElement('div'); item.textContent = tag; item.className = 'suggestion-item';
+                item.onclick = () => selectSuggestion(tag); item.onmouseover = () => { highlightedIndex = index; updateHighlight(Array.from(suggestionsDiv.children)); };
+                suggestionsDiv.appendChild(item);
+            });
+            suggestionsDiv.style.display = 'block';
+        }
+        function selectSuggestion(tag) { addTag(tag); }
+        document.addEventListener('click', (e) => { if (!inputField.contains(e.target) && !suggestionsDiv.contains(e.target)) { suggestionsDiv.style.display = 'none'; } });
+        // --- End Tagging & Autocomplete ---
+
+
+        async function checkServerHealth() {
+            try {
+                const response = await fetch(HEALTH_ENDPOINT);
+                return response.ok;
+            } catch (error) {
+                return false;
+            }
+        }
+
+        async function findRecipes() { // Renamed function
+            const resultsDiv = document.getElementById('results');
+            
+            // Collect all constraints (Allergies are primary now)
+            const availableIngredients = document.getElementById('available-ingredients').value.trim();
+            const dietaryPreference = document.getElementById('dietary-preference').value; 
+            const excludedTagsString = selectedAllergies.join(', '); // Allergies from tags
+
+            // Optional constraints
+            const maxCost = parseFloat(document.getElementById('max-cost').value);
+            const minProtein = parseFloat(document.getElementById('min-protein').value);
+            const maxFat = parseFloat(document.getElementById('max-fat').value);
+
+            // Basic validation: MUST provide available ingredients for search
+            if (!availableIngredients) {
+                 return displayError("Please enter at least one main ingredient you have available.", false);
+            }
+
+            resultsDiv.innerHTML = `<div class="loading">🔄 Checking server connection...</div>`;
+            
+            const isServerUp = await checkServerHealth();
+            if (!isServerUp) return displayError(`Server Connection Failed. Is Flask running on port 5000?`, false);
+            
+            // Updated Loading Message
+            resultsDiv.innerHTML = `<div class="loading">🔄 Searching for recipes and filtering by your allergies...</div>`;
+
+            try {
+                const payload = {
+                    // Only send necessary fields for the new recipe-centric search
+                    additional_allergies: excludedTagsString, 
+                    available_ingredients: availableIngredients,
+                    dietary_preference: dietaryPreference,
+                    // Send optional constraints for secondary filtering
+                    max_cost: isNaN(maxCost) ? 999 : maxCost, 
+                    min_protein: isNaN(minProtein) ? 0 : minProtein,
+                    max_fat: isNaN(maxFat) ? 999 : maxFat
+                };
+
+                const response = await fetch(API_ENDPOINT, { // Still POST to the same endpoint
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    let errorJson = { message: `Server returned HTTP status ${response.status}` };
+                    try { errorJson = JSON.parse(errorText); } catch (e) { /* non-JSON error */ }
+                    throw new Error(`HTTP error! Status: ${response.status}. Message: ${errorJson.message || 'Check server logs for details.'}`);
+                }
+                
+                const data = await response.json();
+                
+                if (data.success && data.recipes && data.recipes.length > 0) {
+                    displayRecipeResults(data); // Use the new display function
+                } else {
+                    displayError(data.message || 'No safe recipes found matching your criteria.', true);
+                }
+                
+            } catch (error) {
+                console.error('Error fetching recipes:', error);
+                displayError(`Connection or API Failure: ${error.message}`, false);
+            }
+        }
+
+        // NEW function to display recipe cards
+        function displayRecipeResults(data) {
+            const resultsDiv = document.getElementById('results');
+            const recipes = data.recipes; // Array of recipe objects
+            const params = data.parameters;
+            
+            let recipesHtml = `
+                <h3 style="margin-bottom: 5px;">🍲 Safe Recipe Results</h3>
+                <div class="success">
+                    ✅ Found ${recipes.length} recipes matching your filters!
+                </div>
+            `;
+            
+            recipes.forEach((recipe, index) => {
+                recipesHtml += `
+                    <div class="recipe-card ${index === 0 ? 'top-result' : ''}">
+                        <h4>
+                           ${recipe.thumbnail ? `<img src="${recipe.thumbnail}" alt="Recipe thumbnail">` : ''} 
+                           <span>${index + 1}: ${recipe.title}</span>
+                        </h4>
+                        
+                        <div class="recipe-ingredients">
+                            <h5>Ingredients:</h5>
+                            <ul>
+                                ${recipe.ingredients.map(ing => `<li>${ing}</li>`).join('')}
+                            </ul>
+                        </div>
+                        
+                        <div class="recipe-instructions">
+                            <h5>Instructions:</h5>
+                            <ol>
+                                ${recipe.instructions
+                                    .filter(step => step && step.trim().length > 1) // Filter out empty lines
+                                    .map(step => `<li>${step.trim()}</li>`).join('')}
+                            </ol>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            // Add summary of filters applied
+             recipesHtml += `
+                <div class="recipe-card" style="background: #e9ecef;">
+                    <h4>ℹ️ Filters Applied</h4>
+                    <p><strong>Allergies Excluded:</strong> ${params.excluded_tags.join(', ') || 'None'}</p>
+                    <p><strong>Dietary Preference:</strong> ${params.dietary_preference}</p>
+                    <p>(Optional goals: Max Cost $${params.max_cost}, Min Protein ${params.min_protein}g, Max Fat ${params.max_fat}g)</p>
+                </div>
+            `;
+
+            resultsDiv.innerHTML = recipesHtml;
+        }
+        
+        // DisplayError function remains largely the same
+        function displayError(message, isBackendIssue) {
+            const resultsDiv = document.getElementById('results');
+            let hint = isBackendIssue 
+                ? "Try adjusting your search ingredients or relaxing filters." 
+                : "Check if the Flask server is running on http://localhost:5000 and the console for technical errors.";
+            
+            resultsDiv.innerHTML = `
+                <h3>🍲 Safe Recipe Results</h3>
+                <div class="error">
+                    ❌ ${message}
+                </div>
+                <p>${hint}</p>
+            `;
+        }
+
+        // Initialize the page
+        document.addEventListener('DOMContentLoaded', function() {
+            // Initialize with the user's known allergies
+            addTag('peanut');
+            addTag('legume');
+            addTag('treenut');
+            renderTags();
+        });
+    </script>
+</body>
+</html>
