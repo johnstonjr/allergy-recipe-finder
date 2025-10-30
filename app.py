@@ -10,6 +10,8 @@ from recipe_utils import search_recipes_by_ingredient, get_recipe_details, Recip
 from api_utils import APIError, USDA_API_KEY # Assuming api_utils still exists, though not used directly here
 from typing import List, Dict, Any
 import time
+import random
+import logging
 
 app = Flask(__name__)
 CORS(app)
@@ -26,6 +28,54 @@ if not LLM_API_KEY:
 
 # --- LLM API Configuration ---
 LLM_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent"
+
+# Configure logging for backoff/debug output
+logging.basicConfig(level=logging.DEBUG)
+
+# --- Exponential Backoff Helper for Gemini API ---
+def call_gemini_api_with_backoff(payload):
+    """
+    Calls the Gemini API with exponential backoff for transient errors.
+    Returns the response object or None if it fails.
+    """
+    API_KEY = os.environ.get("GOOGLE_API_KEY")
+    if not API_KEY:
+        logging.error("API Key not found in environment for backoff function")
+        return None
+
+    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent"
+    headers = {'Content-Type': 'application/json'}
+    params = {'key': API_KEY}
+
+    max_retries = 5
+    base_delay = 1  # seconds
+    RETRYABLE_STATUS_CODES = [500, 503, 504]
+
+    for attempt in range(max_retries):
+        try:
+            response = requests.post(url, headers=headers, params=params, json=payload)
+
+            if response.status_code == 200:
+                logging.debug(f"API call successful on attempt {attempt + 1}")
+                return response
+            elif response.status_code in RETRYABLE_STATUS_CODES:
+                logging.warning(f"API call failed with status {response.status_code} on attempt {attempt + 1}. Retrying...")
+                delay = (base_delay * (2 ** attempt)) + random.uniform(0, 0.1)
+                logging.debug(f"Waiting {delay:.2f} seconds before next retry.")
+                time.sleep(delay)
+            else:
+                logging.error(f"API call failed with non-retryable status {response.status_code}: {response.text}")
+                return response
+        except requests.exceptions.RequestException as e:
+            logging.error(f"Network error on attempt {attempt + 1}: {e}")
+            if attempt == max_retries - 1:
+                return None
+            delay = (base_delay * (2 ** attempt)) + random.uniform(0, 0.1)
+            logging.debug(f"Waiting {delay:.2f} seconds before next retry.")
+            time.sleep(delay)
+
+    logging.error("API call failed after all retries.")
+    return None
 
 # --- Allergy Keywords Mapping (Keep as is) ---
 ALLERGY_KEYWORD_MAP = {
@@ -88,59 +138,34 @@ def generate_enhanced_recipe(recipe_details: Dict[str, Any]) -> Dict[str, Any]:
         "systemInstruction": {"parts": [{"text": system_prompt}]}
     }
 
-    max_retries = 3
-    for attempt in range(max_retries):
-        # DEBUG: Print ingredients and instructions being sent
-        print(f"--- LLM Enhancement Attempt {attempt + 1} for '{original_title}' ---")
-        print(f"[DEBUG] Ingredients List: {ingredients_list}")
-        print(f"[DEBUG] Original Instructions:\n{original_instructions}")
-        
-        try:
-            # DEBUG: Print the full payload being sent
-            payload_json = json.dumps(payload, indent=2)
-            print(f"[DEBUG] Full Payload Being Sent:\n{payload_json}")
-            
-            response = requests.post(
-                LLM_API_URL,
-                headers={
-                    'Content-Type': 'application/json',
-                    'X-Goog-Api-Key': LLM_API_KEY # Key sent in header
-                },
-                data=json.dumps(payload),
-                timeout=25 # Increased timeout slightly
-            )
-            
-            # DEBUG: Print response status and raw text
-            print(f"[DEBUG] Response Status Code: {response.status_code}")
-            print(f"[DEBUG] Response Text (Raw):\n{response.text}")
-            
-            response.raise_for_status()
+    # DEBUG: Print ingredients and instructions being sent
+    print(f"--- LLM Enhancement Attempt 1 for '{original_title}' ---")
+    print(f"[DEBUG] Ingredients List: {ingredients_list}")
+    print(f"[DEBUG] Original Instructions:\n{original_instructions}")
 
-            result = response.json()
-            json_text = result['candidates'][0]['content']['parts'][0]['text']
-            recipe_data = json.loads(json_text)
+    # DEBUG: Print the full payload being sent
+    payload_json = json.dumps(payload, indent=2)
+    print(f"[DEBUG] Full Payload Being Sent:\n{payload_json}")
 
-            # Return original title + enhanced instructions
-            return {
-                "title": original_title,
-                "instructions": recipe_data.get("enhanced_instructions", recipe_details['instructions']) # Fallback to original
-            }
-        except Exception as e:
-            error_details = ""
-            resp = locals().get('response')
-            if resp is not None and resp.status_code in [401, 403, 429]: # Check for auth or rate limit errors
-                error_details = f" (Status: {resp.status_code})"
-            print(f"LLM Enhancer failed on attempt {attempt + 1}: {e}{error_details}")
-            if attempt < max_retries - 1:
-                delay = 2 ** attempt
-                time.sleep(delay)
-            else:
-                print(f"LLM Enhancer failed all retries for '{original_title}'. Using original instructions.")
-                # Fallback: Return the original details if LLM fails
-                return {
-                    "title": original_title,
-                    "instructions": recipe_details['instructions']
-                }
+    # Use backoff-enabled helper
+    response = call_gemini_api_with_backoff(payload)
+
+    if response and response.status_code == 200:
+        logging.debug("Response Status Code: 200")
+        logging.debug(f"Response Text (Raw): {response.text}")
+        result = response.json()
+        json_text = result['candidates'][0]['content']['parts'][0]['text']
+        recipe_data = json.loads(json_text)
+        return {
+            "title": original_title,
+            "instructions": recipe_data.get("enhanced_instructions", recipe_details['instructions'])
+        }
+    elif response:
+        logging.error(f"LLM Enhancer failed with permanent status {response.status_code}: {response.text}")
+        return {"title": original_title, "instructions": recipe_details['instructions']}
+    else:
+        logging.error("LLM Enhancer failed: No response from server after all retries.")
+        return {"title": original_title, "instructions": recipe_details['instructions']}
     # Should not be reached, but included for safety
     return { "title": original_title, "instructions": recipe_details['instructions']}
 
@@ -231,7 +256,8 @@ def suggest_recipe():
                 'thumbnail': details['thumbnail']
             })
 
-            if len(safe_and_enhanced_recipes) >= 5: break # Limit to top 5
+            # Keep the per-request LLM work small to avoid server timeouts on Render
+            if len(safe_and_enhanced_recipes) >= 3: break # Limit to top 3
 
         # 4. Return Results
         if safe_and_enhanced_recipes:
